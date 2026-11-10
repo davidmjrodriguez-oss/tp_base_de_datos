@@ -1,0 +1,9 @@
+id,nombre,precio_centavos,stock,disponible,eliminado,fecha_copia
+1,Hamburguesa clasica,350000,20,t,f,2026-10-27T22:52:54Z
+2,Hamburguesa doble,480000,15,t,f,2026-10-27T22:52:54Z
+3,Papas fritas,200000,40,t,f,2026-10-27T22:52:54Z
+4,Gaseosa 500 ml,120000,50,t,f,2026-10-27T22:52:54Z
+5,Limonada casera,150000,10,t,f,2026-10-27T22:52:54Z
+6,Choripan,280000,12,f,t,2026-10-27T22:52:54Z
+7,Brownie,160000,8,f,f,2026-10-27T22:52:54Z
+8,Combo feria,520000,5,t,f,2026-10-27T22:52:54Z

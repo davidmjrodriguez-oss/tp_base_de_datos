@@ -1,0 +1,8 @@
+2026-11-04 10:10:01 LOG:  statement: SELECT fn_autenticar('Admin_Sintetico', '***');
+2026-11-04 10:10:03 LOG:  statement: SELECT fn_autenticar('Admin_Sintetico', '***');
+2026-11-04 10:10:06 LOG:  statement: SELECT fn_autenticar('Admin_Sintetico', '***');
+2026-11-04 10:10:10 LOG:  statement: SELECT fn_autenticar('Admin_Sintetico', 'ClaveCorrecta_Sintetica'); -- Éxito
+2026-11-04 10:10:15 LOG:  statement: SELECT * FROM usuario;
+2026-11-04 10:11:00 LOG:  statement: SET ROLE Rol_Bajo_Sintetico;
+2026-11-04 10:11:05 ERROR:  must have admin option on role "Admin_Sintetico"
+2026-11-04 10:11:05 STATEMENT:  GRANT Admin_Sintetico TO Rol_Bajo_Sintetico;

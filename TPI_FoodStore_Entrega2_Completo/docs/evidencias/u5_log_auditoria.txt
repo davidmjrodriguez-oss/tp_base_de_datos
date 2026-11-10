@@ -1,0 +1,4 @@
+2026-11-04 10:00:00 LOG:  connection authorized: user=admin_datos database=food_store
+2026-11-04 10:01:05 LOG:  statement: INSERT INTO usuario (nombre, email, rol, fecha_alta) VALUES ('Usuario Prueba', 'prueba@foodstore.com', 'Cliente', CURRENT_DATE);
+2026-11-04 10:01:15 LOG:  statement: UPDATE usuario SET nombre = 'Usuario Prueba Modificado' WHERE email = 'prueba@foodstore.com';
+2026-11-04 10:05:00 FATAL:  password authentication failed for user "app_web"

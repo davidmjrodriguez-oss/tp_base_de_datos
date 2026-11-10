@@ -1,0 +1,184 @@
+Pager usage is off.
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:14: NOTICE:  view "v_control_lote_almacen" does not exist, skipping
+DROP VIEW
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:15: NOTICE:  table "control_lote" does not exist, skipping
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:15: NOTICE:  table "responsable_deposito" does not exist, skipping
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:15: NOTICE:  table "control_lote_almacen" does not exist, skipping
+DROP TABLE
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:16: NOTICE:  table "lote" does not exist, skipping
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:16: NOTICE:  table "deposito" does not exist, skipping
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:16: NOTICE:  table "usuario" does not exist, skipping
+DROP TABLE
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:17: NOTICE:  function fn_chk_unico_responsable_por_lote_deposito() does not exist, skipping
+DROP FUNCTION
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:18: NOTICE:  function fn_chk_cambio_deposito_responsable() does not exist, skipping
+DROP FUNCTION
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+INSERT 0 4
+INSERT 0 3
+INSERT 0 3
+CREATE TABLE
+INSERT 0 3
+
+=== 1. Instancia original ===
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+     501 |          30 |                    801
+     502 |          30 |                    801
+     503 |          31 |                    802
+(3 rows)
+
+
+=== 2a. DF2 se cumple en la instancia: ningún responsable en >1 depósito (debe dar 0 filas) ===
+ responsable_control_id 
+------------------------
+(0 rows)
+
+
+=== 2b. El determinante de DF2 NO es superclave: se repite (801 aparece 2 veces) ===
+ responsable_control_id | apariciones 
+------------------------+-------------
+                    801 |           2
+(1 row)
+
+
+=== 2c. Redundancia: el hecho "801 pertenece al depósito 30" está almacenado varias veces ===
+ responsable_control_id | deposito_id | veces_repetido 
+------------------------+-------------+----------------
+                    801 |          30 |              2
+                    802 |          31 |              1
+(2 rows)
+
+
+=== 3a. ANOMALÍA DE INSERCIÓN ===
+Registrar que el responsable 803 pertenece al depósito 32, sin que aún controle ningún lote:
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:87: NOTICE:  RECHAZADO: null value in column "lote_id" of relation "control_lote_almacen" violates not-null constraint
+DO
+
+=== 3b. ANOMALÍA DE BORRADO ===
+BEGIN
+Antes: ¿sabemos a qué depósito pertenece el responsable 802?
+ deposito_id 
+-------------
+          31
+(1 row)
+
+DELETE 1
+Después de borrar el lote 503: el dato "802 pertenece al depósito 31" desapareció (debe dar 0 filas)
+ deposito_id 
+-------------
+(0 rows)
+
+ROLLBACK
+
+=== 3c. ANOMALÍA DE ACTUALIZACIÓN ===
+BEGIN
+Se traslada el responsable 801 al depósito 31, pero se actualiza solo la fila del lote 501:
+UPDATE 1
+Resultado: 801 queda en dos depósitos a la vez (DF2 violada, la base no lo impide):
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+     501 |          31 |                    801
+     502 |          30 |                    801
+(2 rows)
+
+ responsable_control_id | depositos_distintos 
+------------------------+---------------------
+                    801 |                   2
+(1 row)
+
+ROLLBACK
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE VIEW
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+INSERT 0 2
+INSERT 0 3
+
+=== 5. Tablas descompuestas ===
+ responsable_control_id | deposito_id 
+------------------------+-------------
+                    801 |          30
+                    802 |          31
+(2 rows)
+
+ lote_id | responsable_control_id 
+---------+------------------------
+     501 |                    801
+     502 |                    801
+     503 |                    802
+(3 rows)
+
+
+=== 6a. Original EXCEPT vista (debe dar 0 filas) ===
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+(0 rows)
+
+
+=== 6b. Vista EXCEPT original (debe dar 0 filas: no hay tuplas espurias) ===
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+(0 rows)
+
+
+=== 6c. Cantidad de filas: original vs vista (deben coincidir) ===
+ filas_original | filas_vista 
+----------------+-------------
+              3 |           3
+(1 row)
+
+
+=== 6d. Contenido de la vista de compatibilidad ===
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+     501 |          30 |                    801
+     502 |          30 |                    801
+     503 |          31 |                    802
+(3 rows)
+
+
+=== 7a. Inserción: ahora se puede registrar 803 en el depósito 32 sin lote ===
+BEGIN
+INSERT 0 1
+ responsable_control_id | deposito_id 
+------------------------+-------------
+                    803 |          32
+(1 row)
+
+ROLLBACK
+
+=== 7b. Borrado: al borrar el lote 503, el dato de 802 se conserva ===
+BEGIN
+DELETE 1
+ responsable_control_id | deposito_id 
+------------------------+-------------
+                    802 |          31
+(1 row)
+
+ROLLBACK
+
+=== 7c. Actualización: trasladar a 801 al depósito 31 es UN solo UPDATE y queda consistente ===
+BEGIN
+UPDATE 1
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+     501 |          31 |                    801
+     502 |          31 |                    801
+(2 rows)
+
+ROLLBACK
+
+=== 7d. La DF1 original sigue protegida: dos responsables del mismo depósito en un lote se rechazan ===
+BEGIN
+INSERT 0 1
+INSERT 0 1
+psql:/home/claude/tp/tp_fnbc_control_lote.sql:262: NOTICE:  RECHAZADO: El lote 501 ya tiene otro responsable de control en el mismo depósito (viola LoteID,DepositoID -> ResponsableControlID)
+DO
+ROLLBACK

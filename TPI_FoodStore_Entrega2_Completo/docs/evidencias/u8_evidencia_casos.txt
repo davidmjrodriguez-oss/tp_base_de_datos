@@ -1,0 +1,155 @@
+
+########################################################################
+# 0. PostgreSQL de pruebas: esquema + línea base
+########################################################################
+
+-- Línea base ANTES de la simulación:
+ pedidos | detalles | stock_total |           huella_stock           
+---------+----------+-------------+----------------------------------
+       2 |        2 |         160 | cea5508f3e38e2f43fc798c831d1c4ae
+(1 row)
+
+########################################################################
+# 1. Base de la tablet desde cero + instantánea inicial + catálogo
+########################################################################
+sqlite> .read schema_sqlite.sql
+psql> \copy (SELECT * FROM v_snapshot_movil ORDER BY id) TO '/home/claude/food-store/movil/servidor_snapshot.csv' CSV HEADER
+COPY 8
+.import --csv --skip 1 servidor_snapshot.csv snapshot_servidor
+-- 8 filas importadas · fecha de la copia: 2026-10-27T22:52:54Z
+sqlite> .read cargar_cache.sql
+sqlite> SELECT count(*) AS productos_en_cache, min(fecha_copia) AS fecha_de_la_copia FROM producto_cache
+productos_en_cache | fecha_de_la_copia
+8 | 2026-10-27T22:52:54Z
+
+########################################################################
+# 2. Consigna 1.c · pruebas (COMMIT, ROLLBACK, C1, C7)
+########################################################################
+sqlite> .read pruebas_sqlite.sql
+=== 1) COMMIT: borrador completo (borrador + items + solicitud) ===
+borradores | items | solicitudes
+1 | 2 | 1
+=== 1) ROLLBACK: otra operacion que se deshace ===
+borradores_dentro_de_la_transaccion
+2
+borradores_despues_del_rollback
+1
+=== C1) Catalogo disponible, sin conectarse al servidor ===
+id | nombre | precio_pesos | stock_visto
+6 | Choripan | 2800.0 | 12
+8 | Combo feria | 5200.0 | 5
+4 | Gaseosa 500 ml | 1200.0 | 50
+1 | Hamburguesa clasica | 3500.0 | 20
+2 | Hamburguesa doble | 4800.0 | 15
+5 | Limonada casera | 1500.0 | 10
+3 | Papas fritas | 1800.0 | 40
+=== C7) Cantidad en 0: da error y no deja filas ===
+Error: CHECK constraint failed: cantidad > 0
+borrador_c7 | items_c7
+0 | 0
+=== C7) Producto inexistente: da error y no deja filas ===
+Error: FOREIGN KEY constraint failed
+borrador_c7b | items_c7b
+0 | 0
+=== Totales finales (deben ser iguales a los del paso 1: 1 borrador, 2 items, 1 solicitud) ===
+borradores | items | solicitudes
+1 | 2 | 1
+=== Limpieza de los datos de prueba ===
+
+########################################################################
+# 3. C5 y C3 (instantánea inicial)
+########################################################################
+sqlite> .read casos/fase1_borradores_C5_C3.sql
+sqlite> .read semaforo.sql
+sqlite> .read ver_cola.sql
+solicitud | borrador | estado | motivo
+e5000000 | b5000000 | SIMULADO_APROBADO | todo coincide con la instantanea (simulado, no es una venta)
+e3000000 | b3000000 | RECHAZADO | Combo feria: pide 6 y quedan 5
+
+########################################################################
+# 4. C2 y C4: borradores, cambio en el servidor, instantánea nueva, semáforo
+########################################################################
+sqlite> .read casos/fase2_borradores_C2_C4.sql
+-- El preparador cambia la copia del servidor (la tablet no toca nada):
+UPDATE 1
+UPDATE 1
+psql> \copy (SELECT * FROM v_snapshot_movil ORDER BY id) TO '/home/claude/food-store/movil/servidor_snapshot.csv' CSV HEADER
+COPY 8
+.import --csv --skip 1 servidor_snapshot.csv snapshot_servidor
+-- 8 filas importadas · fecha de la copia: 2026-10-27T22:52:54Z
+sqlite> .read semaforo.sql
+sqlite> .read ver_cola.sql
+solicitud | borrador | estado | motivo
+e5000000 | b5000000 | SIMULADO_APROBADO | todo coincide con la instantanea (simulado, no es una venta)
+e3000000 | b3000000 | RECHAZADO | Combo feria: pide 6 y quedan 5
+e2000000 | b2000000 | CONFLICTO | Papas fritas: precio visto 180000 y actual 200000 centavos
+e4000000 | b4000000 | RECHAZADO | Choripan fue dado de baja
+
+########################################################################
+# 5. C4: recargar el catálogo (la fila queda, deja de verse)
+########################################################################
+sqlite> .read cargar_cache.sql
+sqlite> .read casos/fase3_C4_recarga_catalogo.sql
+Catalogo disponible (el choripan ya no aparece):
+id | nombre
+1 | Hamburguesa clasica
+2 | Hamburguesa doble
+3 | Papas fritas
+4 | Gaseosa 500 ml
+5 | Limonada casera
+8 | Combo feria
+Pero la fila sigue en producto_cache (lapida):
+id | nombre | disponible | eliminado
+6 | Choripan | 0 | 1
+Y el item del borrador C4 sigue apuntando a una fila que existe:
+item_intacto | nombre
+1 | Choripan
+
+########################################################################
+# 6. C2: el cliente acepta el precio nuevo -> solicitud nueva
+########################################################################
+sqlite> .read casos/fase4_C2_cliente_acepta.sql
+sqlite> .read semaforo.sql
+sqlite> .read ver_cola.sql
+solicitud | borrador | estado | motivo
+e5000000 | b5000000 | SIMULADO_APROBADO | todo coincide con la instantanea (simulado, no es una venta)
+e3000000 | b3000000 | RECHAZADO | Combo feria: pide 6 y quedan 5
+e2000000 | b2000000 | CONFLICTO | Papas fritas: precio visto 180000 y actual 200000 centavos
+e4000000 | b4000000 | RECHAZADO | Choripan fue dado de baja
+e2000000 | b2000000 | SIMULADO_APROBADO | todo coincide con la instantanea (simulado, no es una venta)
+
+########################################################################
+# 7. C6: reenviar la misma solicitud (mismo UUID)
+########################################################################
+sqlite> SELECT count(*) AS filas_en_cola FROM cola_sync
+filas_en_cola
+5
+sqlite> .read casos/fase5_C6_reenvio.sql
+Error: UNIQUE constraint failed: cola_sync.solicitud_uuid
+sqlite> SELECT count(*) AS filas_en_cola_despues FROM cola_sync
+filas_en_cola_despues
+5
+-- Repetir la simulación (semáforo otra vez):
+sqlite> .read semaforo.sql
+cola idéntica antes y después de repetir la simulación: True
+sqlite> .read ver_cola.sql
+solicitud | borrador | estado | motivo
+e5000000 | b5000000 | SIMULADO_APROBADO | todo coincide con la instantanea (simulado, no es una venta)
+e3000000 | b3000000 | RECHAZADO | Combo feria: pide 6 y quedan 5
+e2000000 | b2000000 | CONFLICTO | Papas fritas: precio visto 180000 y actual 200000 centavos
+e4000000 | b4000000 | RECHAZADO | Choripan fue dado de baja
+e2000000 | b2000000 | SIMULADO_APROBADO | todo coincide con la instantanea (simulado, no es una venta)
+
+########################################################################
+# 8. PostgreSQL: pedidos y stock NO cambiaron
+########################################################################
+ pedidos | detalles | stock_total |           huella_stock           
+---------+----------+-------------+----------------------------------
+       2 |        2 |         160 | cea5508f3e38e2f43fc798c831d1c4ae
+(1 row)
+-- Cambios deliberados del preparador (C2 y C4), ninguno hecho por la tablet:
+ id |    nombre    | precio_centavos | stock | disponible | eliminado 
+----+--------------+-----------------+-------+------------+-----------
+  3 | Papas fritas |          200000 |    40 | t          | f
+  6 | Choripan     |          280000 |    12 | f          | t
+(2 rows)
